@@ -1,0 +1,4 @@
+Este es un documento de prueba.
+Cliente: {{client_name}}
+Monto: {{payment_amount}}
+Email: {{email_contact}} 
