@@ -13,55 +13,45 @@ use Psr\Log\LoggerInterface;
 class DocumentProcessController extends AbstractController
 {
     private const GOTENBERG_URL = 'https://demo.gotenberg.dev/forms/libreoffice/convert';
-    private string $tempDir;
-    private string $debugDir;
 
     public function __construct(
         private HttpClientInterface $httpClient,
         private LoggerInterface $logger
-    ) {
-        $this->tempDir = sys_get_temp_dir();
-        $this->debugDir = dirname(__DIR__, 2) . '/var/debug/odt';
-    }
+    ) {}
 
-    private function reemplazarKeysEnOdt(string $odtPath, array $vars, string $outputPath): void
+    private function reemplazarKeysEnOdt(string $odtPath, array $vars): string
     {
-        $tmpDir = $this->tempDir . '/odt_' . uniqid();
+        // Crear directorio temporal que se eliminará automáticamente al final del script
+        $tmpDir = sys_get_temp_dir() . '/odt_' . uniqid();
+        $outputPath = $tmpDir . '_processed.odt';
         mkdir($tmpDir);
 
-        // 1. Descomprimir el .odt
-        $zip = new \ZipArchive();
-        if ($zip->open($odtPath) === true) {
+        try {
+            // 1. Descomprimir el .odt
+            $zip = new \ZipArchive();
+            if ($zip->open($odtPath) !== true) {
+                throw new \Exception("No se pudo abrir el archivo ODT");
+            }
             $zip->extractTo($tmpDir);
             $zip->close();
-        } else {
-            throw new \Exception("No se pudo abrir el archivo ODT");
-        }
 
-        // 2. Leer content.xml
-        $contentXmlPath = $tmpDir . '/content.xml';
-        $content = file_get_contents($contentXmlPath);
+            // 2. Leer y modificar content.xml
+            $contentXmlPath = $tmpDir . '/content.xml';
+            $content = file_get_contents($contentXmlPath);
 
-        $this->logger->info('Contenido original del content.xml', [
-            'content' => $content
-        ]);
+            // 3. Reemplazar claves
+            foreach ($vars as $clave => $valor) {
+                $content = str_replace('{{' . $clave . '}}', htmlspecialchars($valor), $content);
+            }
 
-        // 3. Reemplazar claves
-        foreach ($vars as $clave => $valor) {
-            // Reemplaza {{clave}} por el valor
-            $content = str_replace('{{' . $clave . '}}', htmlspecialchars($valor), $content);
-        }
+            file_put_contents($contentXmlPath, $content);
 
-        $this->logger->info('Contenido después de reemplazar variables', [
-            'content' => $content
-        ]);
+            // 4. Volver a comprimir como .odt
+            $zip = new \ZipArchive();
+            if ($zip->open($outputPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+                throw new \Exception("No se pudo crear el archivo de salida");
+            }
 
-        // 4. Guardar content.xml modificado
-        file_put_contents($contentXmlPath, $content);
-
-        // 5. Volver a comprimir todo como .odt
-        $zip = new \ZipArchive();
-        if ($zip->open($outputPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) === true) {
             $files = new \RecursiveIteratorIterator(
                 new \RecursiveDirectoryIterator($tmpDir),
                 \RecursiveIteratorIterator::LEAVES_ONLY
@@ -76,12 +66,12 @@ class DocumentProcessController extends AbstractController
             }
 
             $zip->close();
-        } else {
-            throw new \Exception("No se pudo crear el archivo de salida");
-        }
 
-        // Limpieza
-        $this->rrmdir($tmpDir);
+            return $outputPath;
+        } finally {
+            // Limpieza de archivos temporales
+            $this->rrmdir($tmpDir);
+        }
     }
 
     private function rrmdir($dir): void
@@ -115,45 +105,40 @@ class DocumentProcessController extends AbstractController
                 throw new \Exception('Parámetros JSON inválidos');
             }
 
-            // Guardar una copia del archivo original para debug
-            $originalPath = $this->debugDir . '/original_' . uniqid() . '.odt';
-            copy($templateFile->getPathname(), $originalPath);
-            $this->logger->info('Original file saved', [
-                'path' => $originalPath
-            ]);
-
             // Procesar el documento
-            $processedPath = $this->debugDir . '/processed_' . uniqid() . '.odt';
-            $this->reemplazarKeysEnOdt($templateFile->getPathname(), $parameters, $processedPath);
-            $this->logger->info('Processed file saved', [
-                'path' => $processedPath
-            ]);
-
-            // Enviar a Gotenberg
-            $boundary = '------------------------' . bin2hex(random_bytes(8));
-            $content = '';
+            $processedPath = $this->reemplazarKeysEnOdt($templateFile->getPathname(), $parameters);
             
-            // Añadir el archivo al contenido multipart
-            $content .= "--{$boundary}\r\n";
-            $content .= "Content-Disposition: form-data; name=\"files\"; filename=\"document.odt\"\r\n";
-            $content .= "Content-Type: application/vnd.oasis.opendocument.text\r\n\r\n";
-            $content .= file_get_contents($processedPath) . "\r\n";
-            $content .= "--{$boundary}--\r\n";
+            try {
+                // Enviar a Gotenberg
+                $boundary = '------------------------' . bin2hex(random_bytes(8));
+                $content = '';
+                
+                // Añadir el archivo al contenido multipart
+                $content .= "--{$boundary}\r\n";
+                $content .= "Content-Disposition: form-data; name=\"files\"; filename=\"document.odt\"\r\n";
+                $content .= "Content-Type: application/vnd.oasis.opendocument.text\r\n\r\n";
+                $content .= file_get_contents($processedPath) . "\r\n";
+                $content .= "--{$boundary}--\r\n";
 
-            $response = $this->httpClient->request('POST', self::GOTENBERG_URL, [
-                'headers' => [
-                    'Accept' => 'application/pdf',
-                    'Content-Type' => 'multipart/form-data; boundary=' . $boundary,
-                ],
-                'body' => $content
-            ]);
+                $response = $this->httpClient->request('POST', self::GOTENBERG_URL, [
+                    'headers' => [
+                        'Accept' => 'application/pdf',
+                        'Content-Type' => 'multipart/form-data; boundary=' . $boundary,
+                    ],
+                    'body' => $content
+                ]);
 
-            return new Response(
-                $response->getContent(),
-                $response->getStatusCode(),
-                ['Content-Type' => 'application/pdf']
-            );
-
+                return new Response(
+                    $response->getContent(),
+                    $response->getStatusCode(),
+                    ['Content-Type' => 'application/pdf']
+                );
+            } finally {
+                // Limpiar el archivo procesado temporal
+                if (file_exists($processedPath)) {
+                    unlink($processedPath);
+                }
+            }
         } catch (\Exception $e) {
             $this->logger->error('Error processing document', [
                 'error' => $e->getMessage(),
