@@ -12,12 +12,14 @@ use Psr\Log\LoggerInterface;
 
 class DocumentProcessController extends AbstractController
 {
-    private const GOTENBERG_URL = 'https://demo.gotenberg.dev/forms/libreoffice/convert';
+    private string $gotenbergUrl;
 
     public function __construct(
         private HttpClientInterface $httpClient,
         private LoggerInterface $logger
-    ) {}
+    ) {
+        $this->gotenbergUrl = $_ENV['GOTENBERG_URL'];
+    }
 
     private function processOdtTemplate(string $odtPath, array $vars): string
     {
@@ -120,7 +122,7 @@ class DocumentProcessController extends AbstractController
                 $content .= file_get_contents($processedPath) . "\r\n";
                 $content .= "--{$boundary}--\r\n";
 
-                $response = $this->httpClient->request('POST', self::GOTENBERG_URL, [
+                $response = $this->httpClient->request('POST', $this->gotenbergUrl, [
                     'headers' => [
                         'Accept' => 'application/pdf',
                         'Content-Type' => 'multipart/form-data; boundary=' . $boundary,
