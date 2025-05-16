@@ -18,3 +18,8 @@
 /phpunit.xml
 .phpunit.result.cache
 ###< phpunit/phpunit ###
+
+###> test output files ###
+test_output.pdf
+tests/Resources/test_output.pdf
+###< test output files ###
