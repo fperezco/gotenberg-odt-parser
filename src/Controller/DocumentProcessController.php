@@ -19,37 +19,37 @@ class DocumentProcessController extends AbstractController
         private LoggerInterface $logger
     ) {}
 
-    private function reemplazarKeysEnOdt(string $odtPath, array $vars): string
+    private function processOdtTemplate(string $odtPath, array $vars): string
     {
-        // Crear directorio temporal que se eliminará automáticamente al final del script
+        // Create temporary directory that will be automatically deleted at the end of the script
         $tmpDir = sys_get_temp_dir() . '/odt_' . uniqid();
         $outputPath = $tmpDir . '_processed.odt';
         mkdir($tmpDir);
 
         try {
-            // 1. Descomprimir el .odt
+            // 1. Extract the ODT file
             $zip = new \ZipArchive();
             if ($zip->open($odtPath) !== true) {
-                throw new \Exception("No se pudo abrir el archivo ODT");
+                throw new \Exception("Could not open ODT file");
             }
             $zip->extractTo($tmpDir);
             $zip->close();
 
-            // 2. Leer y modificar content.xml
+            // 2. Read and modify content.xml
             $contentXmlPath = $tmpDir . '/content.xml';
             $content = file_get_contents($contentXmlPath);
 
-            // 3. Reemplazar claves
-            foreach ($vars as $clave => $valor) {
-                $content = str_replace('{{' . $clave . '}}', htmlspecialchars($valor), $content);
+            // 3. Replace template variables
+            foreach ($vars as $key => $value) {
+                $content = str_replace('{{' . $key . '}}', htmlspecialchars($value), $content);
             }
 
             file_put_contents($contentXmlPath, $content);
 
-            // 4. Volver a comprimir como .odt
+            // 4. Recompress as ODT
             $zip = new \ZipArchive();
             if ($zip->open($outputPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
-                throw new \Exception("No se pudo crear el archivo de salida");
+                throw new \Exception("Could not create output file");
             }
 
             $files = new \RecursiveIteratorIterator(
@@ -69,19 +69,19 @@ class DocumentProcessController extends AbstractController
 
             return $outputPath;
         } finally {
-            // Limpieza de archivos temporales
-            $this->rrmdir($tmpDir);
+            // Cleanup temporary files
+            $this->removeDirectory($tmpDir);
         }
     }
 
-    private function rrmdir($dir): void
+    private function removeDirectory($dir): void
     {
         if (is_dir($dir)) {
             $objects = scandir($dir);
             foreach ($objects as $object) {
                 if ($object != "." && $object != "..") {
                     if (is_dir($dir . "/" . $object)) {
-                        $this->rrmdir($dir . "/" . $object);
+                        $this->removeDirectory($dir . "/" . $object);
                     } else {
                         unlink($dir . "/" . $object);
                     }
@@ -97,23 +97,23 @@ class DocumentProcessController extends AbstractController
         try {
             $templateFile = $request->files->get('template');
             if (!$templateFile) {
-                throw new \Exception('No se proporcionó el archivo de plantilla');
+                throw new \Exception('Template file not provided');
             }
 
             $parameters = json_decode($request->request->get('parameters', '{}'), true);
             if (json_last_error() !== JSON_ERROR_NONE) {
-                throw new \Exception('Parámetros JSON inválidos');
+                throw new \Exception('Invalid JSON parameters');
             }
 
-            // Procesar el documento
-            $processedPath = $this->reemplazarKeysEnOdt($templateFile->getPathname(), $parameters);
+            // Process the document
+            $processedPath = $this->processOdtTemplate($templateFile->getPathname(), $parameters);
             
             try {
-                // Enviar a Gotenberg
+                // Send to Gotenberg for PDF conversion
                 $boundary = '------------------------' . bin2hex(random_bytes(8));
                 $content = '';
                 
-                // Añadir el archivo al contenido multipart
+                // Add file to multipart content
                 $content .= "--{$boundary}\r\n";
                 $content .= "Content-Disposition: form-data; name=\"files\"; filename=\"document.odt\"\r\n";
                 $content .= "Content-Type: application/vnd.oasis.opendocument.text\r\n\r\n";
@@ -134,7 +134,7 @@ class DocumentProcessController extends AbstractController
                     ['Content-Type' => 'application/pdf']
                 );
             } finally {
-                // Limpiar el archivo procesado temporal
+                // Cleanup processed temporary file
                 if (file_exists($processedPath)) {
                     unlink($processedPath);
                 }
