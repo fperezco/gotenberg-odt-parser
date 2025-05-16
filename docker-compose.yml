@@ -1,0 +1,24 @@
+services:
+  app:
+    image: php:8.2-apache
+    ports:
+      - "80:80"
+    volumes:
+      - .:/var/www/html
+    command: >
+      bash -c "
+        apt-get update &&
+        apt-get install -y git unzip libzip-dev &&
+        docker-php-ext-install zip pdo pdo_mysql &&
+        curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer &&
+        a2enmod rewrite &&
+        echo '<VirtualHost *:80>
+          DocumentRoot /var/www/html/public
+          DirectoryIndex index.php
+          <Directory /var/www/html/public>
+            AllowOverride All
+            Require all granted
+            FallbackResource /index.php
+          </Directory>
+        </VirtualHost>' > /etc/apache2/sites-available/000-default.conf &&
+        apache2-foreground" 
