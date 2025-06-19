@@ -16,7 +16,8 @@ COPY . /var/www/html
 
 WORKDIR /var/www/html
 
-RUN composer install --no-interaction --optimize-autoloader --no-dev
+RUN composer install --no-interaction --optimize-autoloader --no-dev --no-scripts
+
 
 EXPOSE 80
 
