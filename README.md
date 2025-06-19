@@ -99,7 +99,7 @@ class YourService
 
     public function processDocument(string $templatePath, array $parameters): string
     {
-        $response = $this->httpClient->request('POST', 'http://gutenberg-gateway/process-document', [
+        $response = $this->httpClient->request('POST', 'http://gotemberg-odt-parser.example/process-document', [
             'multipart' => [
                 [
                     'name' => 'template',
