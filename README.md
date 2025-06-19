@@ -1,4 +1,4 @@
-# Gutenberg Gateway Service
+# Gotenberg Gateway Service
 
 A microservice that processes ODT templates and converts them to PDF using Gotenberg. This service allows you to:
 1. Replace template variables in ODT files
@@ -23,8 +23,8 @@ A microservice that processes ODT templates and converts them to PDF using Goten
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/gutenberg-gateway.git
-cd gutenberg-gateway
+git clone https://github.com/fperezco/gotenberg-odt-parser.git
+cd gotenberg-odt-parser
 ```
 
 2. Create a `.env.local` file and configure your environment:
@@ -36,6 +36,17 @@ cp .env .env.local
 ```bash
 docker compose up -d
 ```
+
+
+## Configuration
+
+### Environment Variables
+
+| Variable       | Description                  | Default                                              |
+|---------------|------------------------------|------------------------------------------------------|
+| GOTENBERG_URL | URL of the Gotenberg service | https://demo.gotenberg.dev/forms/libreoffice/convert |
+
+
 
 ## Usage
 
@@ -126,14 +137,6 @@ docker compose exec app php bin/phpunit
 - `src/Service/OdtTemplateProcessor.php`: Handles ODT template processing
 - `src/Service/GotenbergConverter.php`: Handles PDF conversion
 - `tests/`: Test suite
-
-## Configuration
-
-### Environment Variables
-
-| Variable       | Description                  | Default                                              |
-|---------------|------------------------------|------------------------------------------------------|
-| GOTENBERG_URL | URL of the Gotenberg service | https://demo.gotenberg.dev/forms/libreoffice/convert |
 
 ## Contributing
 
