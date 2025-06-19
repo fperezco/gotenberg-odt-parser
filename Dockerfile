@@ -10,17 +10,7 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 
 RUN a2enmod rewrite
 
-RUN bash -c "cat > /etc/apache2/sites-available/000-default.conf <<EOF
-<VirtualHost *:80>
-    DocumentRoot /var/www/html/public
-    DirectoryIndex index.php
-    <Directory /var/www/html/public>
-        AllowOverride All
-        Require all granted
-        FallbackResource /index.php
-    </Directory>
-</VirtualHost>
-EOF"
+COPY apache/000-default.conf /etc/apache2/sites-available/000-default.conf
 
 COPY . /var/www/html
 
